@@ -1,0 +1,80 @@
+package com.bancup.security;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.lang.NonNull;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.List;
+
+/**
+ * Filtro de autenticacion JWT.
+ *
+ * Se ejecuta una vez por request. Si el header Authorization contiene un
+ * Bearer token valido, extrae los claims y registra la autenticacion en el
+ * SecurityContext. No consulta la base de datos: el JWT es auto-contenido.
+ *
+ * Si el token esta ausente o es invalido, simplemente pasa al siguiente filtro
+ * sin establecer autenticacion (Spring Security bloqueara el acceso si el
+ * endpoint lo requiere).
+ */
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private final JwtService jwtService;
+
+    @Override
+    protected void doFilterInternal(
+            @NonNull HttpServletRequest request,
+            @NonNull HttpServletResponse response,
+            @NonNull FilterChain filterChain
+    ) throws ServletException, IOException {
+
+        String token = extractToken(request);
+
+        if (token != null
+                && jwtService.validateToken(token)
+                && SecurityContextHolder.getContext().getAuthentication() == null) {
+
+            String email = jwtService.extractEmail(token);
+            String role  = jwtService.extractRole(token);
+
+            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                    email,
+                    null,
+                    List.of(new SimpleGrantedAuthority("ROLE_" + role))
+            );
+            auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(auth);
+
+            log.debug("JWT valido para usuario: {}", email);
+        }
+
+        filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Extrae el token del header Authorization: Bearer <token>.
+     * Retorna null si el header no existe o no tiene el formato correcto.
+     */
+    private String extractToken(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (StringUtils.hasText(header) && header.startsWith("Bearer ")) {
+            return header.substring(7);
+        }
+        return null;
+    }
+}
