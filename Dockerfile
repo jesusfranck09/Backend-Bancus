@@ -12,4 +12,4 @@ EXPOSE 8080
 
 ENV TNS_ADMIN=/app/wallet
 
-CMD sh -c "java -jar target/*.jar"
+CMD ["java","-Doracle.net.tns_admin=/app/wallet","-jar","target/bancup-0.0.1-SNAPSHOT.jar"]
