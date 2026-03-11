@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
+import org.springframework.web.bind.annotation.GetMapping;
 /**
  * Controlador de autenticacion.
  *
@@ -75,6 +75,11 @@ public class AuthController {
         LoginResponse response = authService.login(request, ipOrigen);
 
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/test-db")
+    public String testDb() {
+        return "API funcionando en Render";
     }
 
     // TODO Fase 3: POST /auth/refresh-token
