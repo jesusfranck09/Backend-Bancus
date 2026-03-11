@@ -9,25 +9,20 @@ import org.springframework.web.filter.CorsFilter;
 
 import java.util.List;
 
-/**
- * Configuración global de CORS para el backend Bancus.
- *
- * Permite solicitudes del frontend en desarrollo y deja el punto central
- * donde luego se pueden agregar dominios de producción.
- */
 @Configuration
 public class CorsConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+
         CorsConfiguration configuration = new CorsConfiguration();
+
         configuration.setAllowCredentials(true);
-        configuration.setAllowedOrigins(List.of(
-                "http://localhost:5173",
-                "http://localhost:3000"
-                // Agregar aquí los dominios de producción cuando estén definidos
-        ));
+
+        configuration.setAllowedOriginPatterns(List.of("*"));
+
         configuration.setAllowedHeaders(List.of("*"));
+
         configuration.setAllowedMethods(List.of(
                 "GET",
                 "POST",
@@ -37,7 +32,9 @@ public class CorsConfig {
         ));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+
         source.registerCorsConfiguration("/**", configuration);
+
         return source;
     }
 
