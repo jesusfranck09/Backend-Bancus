@@ -79,7 +79,8 @@ public class AuthController {
 
     @GetMapping("/test-db")
     public String testDb() {
-        return "API funcionando en Render";
+        usuarioRepository.count();
+        return "Conexion a Oracle OK";
     }
 
     // TODO Fase 3: POST /auth/refresh-token
