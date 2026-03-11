@@ -5,6 +5,7 @@ import com.bancup.auth.dto.request.SignupRequest;
 import com.bancup.auth.dto.response.LoginResponse;
 import com.bancup.auth.dto.response.SignupResponse;
 import com.bancup.auth.service.AuthService;
+import com.bancup.repository.UsuarioRepository;
 import com.bancup.common.dto.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.GetMapping;
+
 /**
  * Controlador de autenticacion.
  *
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 public class AuthController {
 
     private final AuthService authService;
+    private final UsuarioRepository usuarioRepository;
 
     /**
      * POST /auth/signup
