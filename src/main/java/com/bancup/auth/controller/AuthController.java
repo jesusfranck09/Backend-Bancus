@@ -79,7 +79,7 @@ public class AuthController {
 
     @GetMapping("/test-db")
     public String testDb() {
-        return "API funcionando en Render";
+        return "API funcionando en Render sobre la bd ya corriendo ";
     }
 
     // TODO Fase 3: POST /auth/refresh-token
