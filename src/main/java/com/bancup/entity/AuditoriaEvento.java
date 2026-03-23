@@ -33,11 +33,11 @@ public class AuditoriaEvento {
     /**
      * Accion registrada. Valores usados: SIGNUP, LOGIN, LOGOUT, etc.
      */
-    @Column(name = "ACCION", nullable = false, length = 100)
+    @Column(name = "ACCION", nullable = false, length = 200)
     private String accion;
 
-    @Column(name = "IP_ORIGEN", length = 50)
-    private String ipOrigen;
+    @Column(name = "CORREO", length = 45)
+    private String correo;
 
     @Column(name = "FECHA_EVENTO")
     private LocalDateTime fechaEvento;

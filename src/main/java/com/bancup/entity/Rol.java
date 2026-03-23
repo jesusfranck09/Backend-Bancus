@@ -28,18 +28,18 @@ public class Rol {
     @Column(name = "DESC_PERFIL", length = 255)
     private String descPerfil;
 
-    @Column(name = "ESTATUS", length = 20)
-    private String estatus;
+    @Column(name = "ESTATUS")
+    private Integer estatus;
 
     @Column(name = "FECHA_CREA")
     private LocalDateTime fechaCrea;
 
-    @Column(name = "USUARIO_CREA", length = 100)
+    @Column(name = "USUARIO_CREA", length = 64)
     private String usuarioCrea;
 
     @Column(name = "FECHA_MODIFICA")
     private LocalDateTime fechaModifica;
 
-    @Column(name = "USUARIO_MODIFICA", length = 100)
+    @Column(name = "USUARIO_MODIFICA", length = 64)
     private String usuarioModifica;
 }

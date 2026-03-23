@@ -18,7 +18,7 @@ import java.util.Date;
  * Servicio para generar y validar JSON Web Tokens (JWT).
  *
  * Algoritmo: HS256.
- * Claims incluidos: subject (email), userId (publicId), email, role.
+ * Claims incluidos: subject (email), userId (id interno), email, role.
  * Expiracion: configurable en application.properties (por defecto 24h).
  */
 @Service
@@ -34,15 +34,15 @@ public class JwtService {
     /**
      * Genera un JWT firmado con HS256.
      *
-     * @param publicId  Identificador publico del usuario (UUID)
+     * @param userId    Identificador del usuario
      * @param email     Email del usuario (subject del token)
      * @param role      Nombre del perfil/rol asignado
      * @return          Token JWT compacto listo para enviar al cliente
      */
-    public String generateToken(String publicId, String email, String role) {
+    public String generateToken(String userId, String email, String role) {
         return Jwts.builder()
                 .subject(email)
-                .claim("userId", publicId)
+                .claim("userId", userId)
                 .claim("email", email)
                 .claim("role", role)
                 .issuedAt(new Date())

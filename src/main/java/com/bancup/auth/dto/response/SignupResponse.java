@@ -13,23 +13,9 @@ import lombok.Data;
 @Builder
 public class SignupResponse {
 
-    /** Identificador publico del usuario (UUID). Usar este en lugar del ID interno. */
-    private String publicId;
-
-    private String email;
-    private String nombre;
-    private String apellidoPaterno;
-    private String apellidoMaterno;
+    private String correo;
+    private String usuario;
 
     /** Nombre del perfil/rol asignado. Ej: "CLIENTE". */
     private String rol;
-
-    /** Estado KYC inicial. Siempre "PENDIENTE" en el signup. */
-    private String kycStatus;
-
-    /** ID de la cuenta base creada automaticamente. */
-    private Long idCuenta;
-
-    /** Tipo de cuenta creada. Ej: "AHORRO". */
-    private String tipoCuenta;
 }

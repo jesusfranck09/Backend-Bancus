@@ -10,7 +10,7 @@ package com.bancup.exception;
 public class InvalidCredentialsException extends BancupException {
 
     public InvalidCredentialsException() {
-        super(ErrorCode.CREDENCIALES_INVALIDAS, "Email o contrasena incorrectos");
+        super(ErrorCode.CREDENCIALES_INVALIDAS, "Correo o contrasena incorrectos");
     }
 
     public InvalidCredentialsException(String message) {

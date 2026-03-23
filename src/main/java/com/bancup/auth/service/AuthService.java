@@ -15,7 +15,7 @@ public interface AuthService {
 
     /**
      * Registra un nuevo usuario en el sistema.
-     * Crea el usuario, su cuenta base y registra el evento de auditoria.
+     * Crea el usuario usando el contrato minimo de registro y registra el evento de auditoria.
      *
      * @param request   Datos del registro
      * @param ipOrigen  IP desde donde se realiza el registro (para auditoria)
@@ -26,9 +26,9 @@ public interface AuthService {
     /**
      * Autentica a un usuario existente y genera un JWT.
      *
-     * @param request   Email y password del usuario
+     * @param request   Correo y contrasena del usuario
      * @param ipOrigen  IP de origen (para auditoria)
-     * @return          LoginResponse con token JWT y datos basicos del usuario
+     * @return          LoginResponse con token JWT y nombre del usuario
      */
     LoginResponse login(LoginRequest request, String ipOrigen);
 

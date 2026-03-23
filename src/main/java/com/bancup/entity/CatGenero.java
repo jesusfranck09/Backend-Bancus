@@ -22,21 +22,21 @@ public class CatGenero {
     @EqualsAndHashCode.Include
     private Long generoId;
 
-    @Column(name = "DESCRIPCION", length = 100)
+    @Column(name = "DESCRIPCION", length = 50)
     private String descripcion;
 
-    @Column(name = "ESTATUS", length = 20)
-    private String estatus;
+    @Column(name = "ESTATUS")
+    private Integer estatus;
 
     @Column(name = "FECHA_CREA")
     private LocalDateTime fechaCrea;
 
-    @Column(name = "USUARIO_CREA", length = 100)
+    @Column(name = "USUARIO_CREA", length = 64)
     private String usuarioCrea;
 
     @Column(name = "FECHA_MODIFICA")
     private LocalDateTime fechaModifica;
 
-    @Column(name = "USUARIO_MODIFICA", length = 100)
+    @Column(name = "USUARIO_MODIFICA", length = 64)
     private String usuarioModifica;
 }

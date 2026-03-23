@@ -6,7 +6,7 @@ import lombok.Data;
 /**
  * Respuesta del endpoint POST /auth/login.
  *
- * En caso de exito:  success=true, message, token JWT, userId (publicId), email.
+ * En caso de exito: success=true, message, token JWT, nombre.
  * En caso de error: el GlobalExceptionHandler devuelve ApiResponse con errorCode.
  */
 @Data
@@ -19,8 +19,6 @@ public class LoginResponse {
     /** JWT Bearer token. Valido por 24 horas. */
     private String token;
 
-    /** Identificador publico del usuario (UUID). Nunca el ID interno. */
-    private String userId;
-
-    private String email;
+    /** Nombre del usuario autenticado. */
+    private String nombre;
 }

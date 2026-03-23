@@ -9,6 +9,7 @@ import com.bancup.auth.service.AuthService;
 import com.bancup.entity.*;
 import com.bancup.exception.DuplicateResourceException;
 import com.bancup.exception.ErrorCode;
+import com.bancup.exception.AccountLockedException;
 import com.bancup.exception.InvalidCredentialsException;
 import com.bancup.exception.ResourceNotFoundException;
 import com.bancup.repository.*;
@@ -19,11 +20,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -32,11 +30,8 @@ public class AuthServiceImpl implements AuthService {
 
     private final UsuarioRepository usuarioRepository;
     private final RolRepository rolRepository;
-    private final CuentaRepository cuentaRepository;
-    private final DispositivoRepository dispositivoRepository;
     private final AuditoriaEventoRepository auditoriaEventoRepository;
     private final CatGeneroRepository catGeneroRepository;
-    private final CatEstadoRepository catEstadoRepository;
     private final PasswordEncoder passwordEncoder;
     private final UsuarioMapper usuarioMapper;
     private final JwtService jwtService;
@@ -45,170 +40,125 @@ public class AuthServiceImpl implements AuthService {
     @Value("${bancup.auth.default-role}")
     private String rolDefecto;
 
-    /** Tipo de cuenta inicial. Configurable en application.properties. */
-    @Value("${bancup.auth.default-account-type}")
-    private String tipoCuentaDefecto;
-
     @Override
     @Transactional
     public SignupResponse signup(SignupRequest request, String ipOrigen) {
-        log.info("Iniciando signup para email: {}", request.getEmail());
+        log.info("Iniciando signup para correo: {}", request.getCorreo());
 
-        // 1. Validar unicidad de email (case-insensitive: se normaliza a minusculas)
-        String emailNormalizado = request.getEmail().toLowerCase().trim();
+        // 1. Validar unicidad de correo (case-insensitive: se normaliza a minusculas)
+        String emailNormalizado = request.getCorreo().toLowerCase().trim();
         if (usuarioRepository.existsByEmail(emailNormalizado)) {
             throw new DuplicateResourceException(
                     ErrorCode.EMAIL_DUPLICADO,
-                    "El email '" + emailNormalizado + "' ya esta registrado"
+                    "El correo '" + emailNormalizado + "' ya esta registrado"
             );
         }
 
-        // 2. Validar unicidad de CURP si se proporciona
-        if (StringUtils.hasText(request.getCurp())) {
-            String curpNormalizada = request.getCurp().toUpperCase().trim();
-            if (usuarioRepository.existsByCurp(curpNormalizada)) {
-                throw new DuplicateResourceException(
-                        ErrorCode.CURP_DUPLICADO,
-                        "La CURP proporcionada ya esta registrada en el sistema"
-                );
-            }
-        }
+        // 2. Resolver rol por defecto desde ROLES
+        Rol rol = resolverRol();
 
-        // 3. Resolver rol: especificado en el request o por defecto desde ROLES
-        Rol rol = resolverRol(request.getIdRol());
+        // 3. Validar genero obligatorio en CAT_GENERO
+        CatGenero genero = catGeneroRepository.findById(request.getGenero())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        ErrorCode.GENERO_NO_ENCONTRADO,
+                        "El genero con id " + request.getGenero() + " no existe en la tabla CAT_GENERO"
+                ));
 
-        // 4. Validar genero si se proporciona (debe existir en CAT_GENERO)
-        CatGenero genero = null;
-        if (request.getGeneroId() != null) {
-            genero = catGeneroRepository.findById(request.getGeneroId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            ErrorCode.GENERO_NO_ENCONTRADO,
-                            "El genero con id " + request.getGeneroId() + " no existe en la tabla CAT_GENERO"
-                    ));
-        }
+        // 4. Hash del password con BCrypt (strength 12). Nunca texto plano.
+        String passwordHash = passwordEncoder.encode(request.getContrasena());
 
-        // 5. Validar entidad/estado si se proporciona (debe existir en CAT_ESTADOS)
-        CatEstado entidad = null;
-        if (request.getEntidadId() != null) {
-            entidad = catEstadoRepository.findById(request.getEntidadId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            ErrorCode.ESTADO_NO_ENCONTRADO,
-                            "La entidad con id " + request.getEntidadId() + " no existe en la tabla CAT_ESTADOS"
-                    ));
-        }
+        String usuarioNormalizado = request.getUsuario().trim();
 
-        // 6. Hash del password con BCrypt (strength 12). Nunca texto plano.
-        String passwordHash = passwordEncoder.encode(request.getPassword());
-
-        // 7. Construir y persistir el usuario
+        // 5. Construir y persistir el usuario.
+        //    Se inicializan los metadatos requeridos por el esquema APP_USER.
+        LocalDateTime ahora = LocalDateTime.now();
         Usuario usuario = Usuario.builder()
                 .rol(rol)
-                .publicId(UUID.randomUUID().toString())
+                .genero(genero)
+                .nombre(usuarioNormalizado)
                 .email(emailNormalizado)
                 .passwordHash(passwordHash)
-                .password2Hash(null)                          // Reservado para fase futura
-                .telefono(request.getTelefono())
-                .nombre(request.getNombre().trim())
-                .apellidoPaterno(request.getApellidoPaterno().trim())
-                .apellidoMaterno(request.getApellidoMaterno() != null
-                        ? request.getApellidoMaterno().trim() : null)
-                .curp(StringUtils.hasText(request.getCurp())
-                        ? request.getCurp().toUpperCase().trim() : null)
-                .fechaNacimiento(request.getFechaNacimiento())
-                .genero(genero)
-                .entidad(entidad)
-                .fotoSelfieUrl(null)                          // Se actualiza en flujo KYC
-                .fotoIneFrenteUrl(null)
-                .fotoIneVueltaUrl(null)
-                .kycStatus("PENDIENTE")
-                .esBiometriaValida(0)
-                .ultimoLogin(null)
-                .fechaRegistro(LocalDateTime.now())
                 .failedLoginAttempts(0)
                 .accountLocked(false)
+                .ultimoLogin(null)
+                .fechaRegistro(ahora)
+                .estatus(1)
+                .fechaCrea(ahora)
+                .usuarioCrea("AUTH_API")
+                .fechaModifica(ahora)
+                .usuarioModifica("AUTH_API")
                 .build();
 
         usuario = usuarioRepository.save(usuario);
-        log.info("Usuario creado con id_usuario={}, public_id={}", usuario.getIdUsuario(), usuario.getPublicId());
+        log.info("Usuario creado con id_usuario={}", usuario.getIdUsuario());
 
-        // 8. Crear cuenta base para el usuario
-        //    saldo inicial = 0, tipo_cuenta configurado en application.properties
-        Cuenta cuenta = Cuenta.builder()
-                .usuario(usuario)
-                .saldo(BigDecimal.ZERO)
-                .tipoCuenta(tipoCuentaDefecto)
-                .fechaCreacion(LocalDateTime.now())
-                .build();
-        cuenta = cuentaRepository.save(cuenta);
-        log.info("Cuenta base creada id_cuenta={} tipo={} para usuario id={}",
-                cuenta.getIdCuenta(), cuenta.getTipoCuenta(), usuario.getIdUsuario());
-
-        // 9. Registrar evento de auditoria: accion SIGNUP
+        // 6. Registrar evento de auditoria: accion SIGNUP
         AuditoriaEvento auditoria = AuditoriaEvento.builder()
                 .usuario(usuario)
                 .accion("SIGNUP")
-                .ipOrigen(ipOrigen)
-                .fechaEvento(LocalDateTime.now())
+                .correo(emailNormalizado)
+                .fechaEvento(ahora)
                 .build();
         auditoriaEventoRepository.save(auditoria);
         log.debug("Evento de auditoria SIGNUP registrado para usuario id={}", usuario.getIdUsuario());
 
-        // 10. Registrar dispositivo SOLO si el request trae datos reales
-        //     No se crean registros vacios/ficticios
-        if (StringUtils.hasText(request.getDeviceTipo()) || StringUtils.hasText(request.getDeviceIp())) {
-            Dispositivo dispositivo = Dispositivo.builder()
-                    .usuario(usuario)
-                    .tipo(request.getDeviceTipo())
-                    .ip(request.getDeviceIp())
-                    .fechaRegistro(LocalDateTime.now())
-                    .build();
-            dispositivoRepository.save(dispositivo);
-            log.debug("Dispositivo registrado tipo={} ip={} para usuario id={}",
-                    request.getDeviceTipo(), request.getDeviceIp(), usuario.getIdUsuario());
-        }
-
-        log.info("Signup completado exitosamente para email={}", emailNormalizado);
-        return usuarioMapper.toSignupResponse(usuario, cuenta);
+        log.info("Signup completado exitosamente para correo={}", emailNormalizado);
+        return usuarioMapper.toSignupResponse(usuario);
     }
 
     @Override
     @Transactional
     public LoginResponse login(LoginRequest request, String ipOrigen) {
-        String emailNormalizado = request.getEmail().toLowerCase().trim();
-        log.info("Iniciando login para email: {}", emailNormalizado);
+        String emailNormalizado = request.getCorreo().toLowerCase().trim();
+        log.info("Iniciando login para correo: {}", emailNormalizado);
 
-        // 1. Buscar usuario por email. Se lanza excepcion generica para no revelar
-        //    si el email existe o no (prevencion de enumeracion de usuarios).
+        // 1. Buscar usuario por correo. Se lanza excepcion generica para no revelar
+        //    si el correo existe o no (prevencion de enumeracion de usuarios).
         Usuario usuario = usuarioRepository.findByEmail(emailNormalizado)
                 .orElseThrow(InvalidCredentialsException::new);
 
+        if (Boolean.TRUE.equals(usuario.getAccountLocked())) {
+            throw new AccountLockedException();
+        }
+
         // 2. Validar password con BCrypt
-        if (!passwordEncoder.matches(request.getPassword(), usuario.getPasswordHash())) {
-            log.warn("Contrasena incorrecta para email: {}", emailNormalizado);
+        if (!passwordEncoder.matches(request.getContrasena(), usuario.getPasswordHash())) {
+            log.warn("Contrasena incorrecta para correo: {}", emailNormalizado);
+            boolean cuentaBloqueada = registrarIntentoFallido(usuario);
+            if (cuentaBloqueada) {
+                throw new AccountLockedException();
+            }
             throw new InvalidCredentialsException();
         }
 
-        // 3. Generar JWT con publicId, email y rol
+        // 3. Actualizar metadata de login y generar JWT con el ID interno del usuario.
+        LocalDateTime ahora = LocalDateTime.now();
+        usuario.setFailedLoginAttempts(0);
+        usuario.setAccountLocked(false);
+        usuario.setUltimoLogin(ahora);
+        usuario.setFechaModifica(ahora);
+        usuario.setUsuarioModifica("AUTH_API");
+        usuarioRepository.save(usuario);
+
         String rol = usuario.getRol() != null ? usuario.getRol().getNombrePerfil() : "CLIENTE";
-        String token = jwtService.generateToken(usuario.getPublicId(), emailNormalizado, rol);
+        String token = jwtService.generateToken(String.valueOf(usuario.getIdUsuario()), emailNormalizado, rol);
 
         // 4. Registrar evento de auditoria: accion LOGIN
         AuditoriaEvento auditoria = AuditoriaEvento.builder()
                 .usuario(usuario)
                 .accion("LOGIN")
-                .ipOrigen(ipOrigen)
-                .fechaEvento(LocalDateTime.now())
+                .correo(emailNormalizado)
+                .fechaEvento(ahora)
                 .build();
         auditoriaEventoRepository.save(auditoria);
 
-        log.info("Login exitoso para usuario publicId={}", usuario.getPublicId());
+        log.info("Login exitoso para usuario id={}", usuario.getIdUsuario());
 
         return LoginResponse.builder()
                 .success(true)
                 .message("Autenticacion exitosa")
                 .token(token)
-                .userId(usuario.getPublicId())
-                .email(emailNormalizado)
+                .nombre(usuario.getNombre())
                 .build();
     }
 
@@ -219,22 +169,14 @@ public class AuthServiceImpl implements AuthService {
     /**
      * Resuelve el rol a asignar al usuario.
      *
-     * Si se especifica idRol en el request: valida existencia en ROLES.
-     * Si no se especifica: busca el rol por defecto (bancup.auth.default-role).
+     * Busca el rol por defecto configurado en bancup.auth.default-role.
      *
      * IMPORTANTE: Si el rol por defecto no existe en la tabla ROLES, se lanza
      * ResourceNotFoundException con ErrorCode.ROL_CLIENTE_NO_CONFIGURADO.
      * Esto indica que los catalogos base no han sido cargados en la BD.
      * NO se inventa ni se crea el rol silenciosamente.
      */
-    private Rol resolverRol(Long idRolSolicitado) {
-        if (idRolSolicitado != null) {
-            return rolRepository.findById(idRolSolicitado)
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            ErrorCode.ROL_NO_ENCONTRADO,
-                            "El rol con id " + idRolSolicitado + " no existe en la tabla ROLES"
-                    ));
-        }
+    private Rol resolverRol() {
         return rolRepository.findByNombrePerfil(rolDefecto)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         ErrorCode.ROL_CLIENTE_NO_CONFIGURADO,
@@ -242,5 +184,15 @@ public class AuthServiceImpl implements AuthService {
                         "Es necesario cargar los catalogos base (INSERT en ROLES con nombre_perfil='" + rolDefecto + "') " +
                         "antes de realizar el primer signup."
                 ));
+    }
+
+    private boolean registrarIntentoFallido(Usuario usuario) {
+        int intentos = usuario.getFailedLoginAttempts() != null ? usuario.getFailedLoginAttempts() + 1 : 1;
+        usuario.setFailedLoginAttempts(intentos);
+        usuario.setAccountLocked(intentos >= 5);
+        usuario.setFechaModifica(LocalDateTime.now());
+        usuario.setUsuarioModifica("AUTH_API");
+        usuarioRepository.save(usuario);
+        return Boolean.TRUE.equals(usuario.getAccountLocked());
     }
 }

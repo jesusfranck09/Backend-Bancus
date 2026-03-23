@@ -35,7 +35,7 @@ public class AuthController {
      * POST /auth/signup
      *
      * Registra un nuevo usuario en el sistema Bancup.
-     * Crea la cuenta base con saldo 0 y registra el evento de auditoria.
+     * Usa un payload minimo: usuario, correo, contrasena, confirmarContrasena y genero.
      *
      * @param request     Body con los datos del nuevo usuario
      * @param httpRequest Request HTTP para extraer la IP de origen
@@ -58,11 +58,11 @@ public class AuthController {
     /**
      * POST /auth/login
      *
-     * Autentica un usuario existente y devuelve un JWT Bearer token.
+     * Autentica un usuario existente y devuelve un JWT Bearer token junto con su nombre.
      *
-     * @param request     Body con email y password
+     * @param request     Body con correo y contrasena
      * @param httpRequest Request HTTP para extraer la IP de origen
-     * @return HTTP 200 OK con token JWT y datos basicos del usuario
+     * @return HTTP 200 OK con token JWT y nombre del usuario
      */
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(

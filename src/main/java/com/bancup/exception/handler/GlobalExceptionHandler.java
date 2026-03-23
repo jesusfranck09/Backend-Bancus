@@ -1,6 +1,7 @@
 package com.bancup.exception.handler;
 
 import com.bancup.common.dto.ApiResponse;
+import com.bancup.exception.AccountLockedException;
 import com.bancup.exception.DuplicateResourceException;
 import com.bancup.exception.ErrorCode;
 import com.bancup.exception.InvalidCredentialsException;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @RestControllerAdvice
 @Slf4j
@@ -29,6 +31,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<?>> handleInvalidCredentials(InvalidCredentialsException ex) {
         log.warn("Intento de login fallido: {}", ex.getMessage());
         return buildSimpleError(HttpStatus.UNAUTHORIZED, ex.getMessage());
+    }
+
+    /**
+     * Cuenta bloqueada por multiples intentos fallidos.
+     * HTTP 423 Locked.
+     */
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<ApiResponse<?>> handleAccountLocked(AccountLockedException ex) {
+        log.warn("Cuenta bloqueada: {}", ex.getMessage());
+        return buildSimpleError(HttpStatus.LOCKED, ex.getMessage());
     }
 
     /**
@@ -80,9 +92,14 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<?>> handleValidationErrors(MethodArgumentNotValidException ex) {
-        String mensajes = ex.getBindingResult().getFieldErrors()
-                .stream()
-                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+        String mensajes = Stream.concat(
+                        ex.getBindingResult().getFieldErrors()
+                                .stream()
+                                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage()),
+                        ex.getBindingResult().getGlobalErrors()
+                                .stream()
+                                .map(ge -> ge.getDefaultMessage())
+                )
                 .collect(Collectors.joining("; "));
         log.warn("Error de validacion en request: {}", mensajes);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
