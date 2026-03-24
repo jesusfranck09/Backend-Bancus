@@ -1,9 +1,13 @@
 package com.bancup.auth.controller;
 
 import com.bancup.auth.dto.request.LoginRequest;
+import com.bancup.auth.dto.request.RequestSignupCodeRequest;
 import com.bancup.auth.dto.request.SignupRequest;
+import com.bancup.auth.dto.request.VerifySignupCodeRequest;
 import com.bancup.auth.dto.response.LoginResponse;
+import com.bancup.auth.dto.response.RequestSignupCodeResponse;
 import com.bancup.auth.dto.response.SignupResponse;
+import com.bancup.auth.dto.response.VerifySignupCodeResponse;
 import com.bancup.auth.service.AuthService;
 import com.bancup.common.dto.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,11 +35,37 @@ public class AuthController {
 
     private final AuthService authService;
 
+    @PostMapping("/signup/request-code")
+    public ResponseEntity<ApiResponse<RequestSignupCodeResponse>> requestSignupCode(
+            @Valid @RequestBody RequestSignupCodeRequest request,
+            HttpServletRequest httpRequest) {
+
+        String ipOrigen = httpRequest.getRemoteAddr();
+        log.info("POST /auth/signup/request-code recibido desde IP: {}", ipOrigen);
+
+        RequestSignupCodeResponse response = authService.requestSignupCode(request, ipOrigen);
+
+        return ResponseEntity.ok(ApiResponse.success("Codigo de verificacion generado", response));
+    }
+
+    @PostMapping("/signup/verify-code")
+    public ResponseEntity<ApiResponse<VerifySignupCodeResponse>> verifySignupCode(
+            @Valid @RequestBody VerifySignupCodeRequest request,
+            HttpServletRequest httpRequest) {
+
+        String ipOrigen = httpRequest.getRemoteAddr();
+        log.info("POST /auth/signup/verify-code recibido desde IP: {}", ipOrigen);
+
+        VerifySignupCodeResponse response = authService.verifySignupCode(request, ipOrigen);
+
+        return ResponseEntity.ok(ApiResponse.success("Correo verificado correctamente", response));
+    }
+
     /**
      * POST /auth/signup
      *
-     * Registra un nuevo usuario en el sistema Bancup.
-     * Usa un payload minimo: usuario, correo, contrasena, confirmarContrasena y genero.
+     * Registra un nuevo usuario en el sistema Bancup una vez validado su correo.
+     * Usa un payload minimo: usuario, correo, contrasena, confirmarContrasena, genero y verificationToken.
      *
      * @param request     Body con los datos del nuevo usuario
      * @param httpRequest Request HTTP para extraer la IP de origen

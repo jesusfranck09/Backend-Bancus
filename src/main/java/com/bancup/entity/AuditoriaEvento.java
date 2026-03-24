@@ -36,8 +36,8 @@ public class AuditoriaEvento {
     @Column(name = "ACCION", nullable = false, length = 200)
     private String accion;
 
-    @Column(name = "CORREO", length = 45)
-    private String correo;
+    @Column(name = "IP_ORIGEN", length = 45)
+    private String ipOrigen;
 
     @Column(name = "FECHA_EVENTO")
     private LocalDateTime fechaEvento;

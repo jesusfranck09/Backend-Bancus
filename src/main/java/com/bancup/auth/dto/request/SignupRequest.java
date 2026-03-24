@@ -36,6 +36,9 @@ public class SignupRequest {
     @NotNull(message = "El genero es obligatorio")
     private Long genero;
 
+    @NotBlank(message = "El verificationToken es obligatorio")
+    private String verificationToken;
+
     @AssertTrue(message = "La contrasena y su confirmacion no coinciden")
     public boolean isConfirmacionContrasenaValida() {
         return contrasena != null && contrasena.equals(confirmarContrasena);

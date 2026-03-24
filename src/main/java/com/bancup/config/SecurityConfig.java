@@ -40,7 +40,14 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/auth/test-db").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/auth/signup", "/auth/login", "/auth/refresh").permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/auth/signup/request-code",
+                                "/auth/signup/verify-code",
+                                "/auth/signup",
+                                "/auth/login",
+                                "/auth/refresh"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

@@ -1,0 +1,973 @@
+openapi: 3.0.3
+info:
+  title: Bancup Auth Signup Flow
+  version: "2026-03-24"
+  description: |
+    Especificacion OpenAPI y guia operativa del flujo actual de autenticacion para frontend.
+
+    ## Objetivo
+    Este archivo no solo documenta endpoints. Tambien define como debe comportarse la UI para que el flujo de alta quede alineado con el backend actual.
+
+    ## Flujo obligatorio de alta
+    1. `POST /auth/signup/request-code`
+    2. `POST /auth/signup/verify-code`
+    3. `POST /auth/signup`
+
+    Si el frontend intenta saltarse uno de esos pasos, el backend va a rechazar la operacion.
+
+    ## Estado inicial de la pantalla de registro
+    Al cargar la vista de registro, el frontend debe iniciar asi:
+
+    Habilitado:
+    - input `correo`
+    - boton `Enviar codigo`
+
+    Deshabilitado u oculto:
+    - input `codigo`
+    - input `usuario`
+    - input `contrasena`
+    - input `confirmarContrasena`
+    - selector `genero`
+    - boton `Crear cuenta`
+
+    ## Maquina de estados sugerida para frontend
+    - `email`: solo correo habilitado
+    - `code`: correo bloqueado o readonly, codigo habilitado
+    - `signupForm`: correo readonly, formulario final habilitado
+    - `done`: registro completado
+
+    ## Estado minimo que el frontend debe guardar
+    - `correo`
+    - `codigo`
+    - `verificationToken`
+    - `fechaExpiracionCodigo`
+    - `step`
+    - flags de loading por accion
+
+    ## Headers generales a enviar
+    Para todos los endpoints de este archivo:
+
+    Request headers recomendados:
+    - `Content-Type: application/json`
+    - `Accept: application/json`
+
+    No enviar:
+    - `Authorization`
+
+    Estos endpoints son publicos y no requieren token Bearer.
+
+    ## Reglas de negocio confirmadas con backend real
+    - El codigo de verificacion expira en `10 minutos`.
+    - El `verificationToken` expira en `15 minutos`.
+    - El backend permite `5 intentos` de verificacion por codigo.
+    - El backend permite `3 reenvios` sobre un codigo activo.
+    - Si se solicita un codigo nuevo, el anterior deja de ser util.
+    - Si el correo cambia, el frontend debe limpiar `codigo` y `verificationToken`.
+
+    ## Regla de manejo de errores
+    El frontend no debe tomar decisiones usando solo `message`.
+
+    La logica debe basarse en:
+    - `HTTP status`
+    - `errorCode`
+
+    `message` debe usarse solo para mostrar texto al usuario o para logging del cliente.
+
+    ## Particularidad importante de login
+    `POST /auth/login` no es homogeneo con los endpoints del signup:
+    - en exito responde un objeto plano `LoginSuccessResponse`
+    - en error responde `ErrorResponse`
+
+    El frontend debe contemplar esa diferencia.
+
+    ## Nota sobre envio de correo
+    Actualmente el backend no envia correo real por SMTP.
+    En ambiente local de debug, `request-code` puede devolver `data.codigoDebug`.
+    El frontend no debe depender de ese campo fuera de pruebas locales.
+
+servers:
+  - url: http://localhost:8081
+    description: Backend local
+
+tags:
+  - name: Auth
+    description: Flujo de registro con verificacion de correo y login
+
+paths:
+  /auth/signup/request-code:
+    post:
+      tags:
+        - Auth
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/AcceptJsonHeader"
+      summary: Solicitar codigo de verificacion para signup
+      description: |
+        ## Cuando debe llamarse
+        Este endpoint se llama cuando el usuario captura su correo por primera vez y presiona `Enviar codigo`.
+
+        ## Estado esperado de la UI antes de llamar
+        Habilitado:
+        - `correo`
+        - `Enviar codigo`
+
+        Deshabilitado:
+        - `codigo`
+        - `usuario`
+        - `contrasena`
+        - `confirmarContrasena`
+        - `genero`
+        - `Crear cuenta`
+
+        ## Headers a enviar
+        ```http
+        Content-Type: application/json
+        Accept: application/json
+        ```
+
+        ## Body exacto esperado
+        ```json
+        {
+          "correo": "usuario@correo.com"
+        }
+        ```
+
+        ## Que debe hacer el frontend si responde 200
+        - mover `step` a `code`
+        - guardar `correo`
+        - guardar `data.fechaExpiracion`
+        - habilitar input `codigo`
+        - habilitar boton `Verificar codigo`
+        - habilitar accion `Reenviar codigo`
+        - habilitar accion `Cambiar correo`
+        - mantener deshabilitado el formulario final
+
+        ## Que debe hacer el frontend si falla
+        - `409 EMAIL_DUPLICADO`: quedarse en la vista de correo y sugerir login
+        - `429 LIMITE_REENVIOS_ALCANZADO`: quedarse en la vista de codigo y bloquear temporalmente el reenvio
+        - `400 VALIDACION_FALLIDA`: no avanzar y mostrar error inline o general segun el caso
+      operationId: requestSignupCode
+      requestBody:
+        required: true
+        description: |
+          Body JSON para solicitar el envio del codigo de verificacion.
+
+          Campo obligatorio:
+          - `correo`
+
+          Restricciones:
+          - debe tener formato email valido
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestSignupCodeRequest"
+            examples:
+              request:
+                value:
+                  correo: usuario@correo.com
+      responses:
+        "200":
+          description: Codigo generado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseRequestSignupCode"
+              examples:
+                success:
+                  value:
+                    success: true
+                    message: Codigo de verificacion generado
+                    data:
+                      correo: usuario@correo.com
+                      fechaExpiracion: "2026-03-24T13:07:44.105643"
+                successDebug:
+                  value:
+                    success: true
+                    message: Codigo de verificacion generado
+                    data:
+                      correo: usuario@correo.com
+                      fechaExpiracion: "2026-03-24T13:07:44.105643"
+                      codigoDebug: "714248"
+        "400":
+          description: Error de validacion del request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                missingEmail:
+                  value:
+                    success: false
+                    message: "correo: El correo es obligatorio"
+                    errorCode: VALIDACION_FALLIDA
+                invalidEmail:
+                  value:
+                    success: false
+                    message: "correo: El formato del correo no es valido"
+                    errorCode: VALIDACION_FALLIDA
+                malformedJson:
+                  value:
+                    success: false
+                    message: El cuerpo de la peticion tiene un formato invalido.
+                    errorCode: VALIDACION_FALLIDA
+        "409":
+          description: El correo ya existe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                duplicateEmail:
+                  value:
+                    success: false
+                    message: "El correo 'usuario@correo.com' ya esta registrado"
+                    errorCode: EMAIL_DUPLICADO
+        "429":
+          description: Limite de reenvios alcanzado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                resendLimit:
+                  value:
+                    success: false
+                    message: Se alcanzo el limite de reenvios para este correo. Espera a que expire el codigo actual o intenta mas tarde.
+                    errorCode: LIMITE_REENVIOS_ALCANZADO
+        "500":
+          description: Error interno no controlado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                internalError:
+                  value:
+                    success: false
+                    message: Error interno del servidor. Por favor intente de nuevo.
+                    errorCode: ERROR_INTERNO
+
+  /auth/signup/verify-code:
+    post:
+      tags:
+        - Auth
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/AcceptJsonHeader"
+      summary: Verificar codigo de correo para signup
+      description: |
+        ## Cuando debe llamarse
+        Este endpoint se llama cuando el usuario ya recibio un codigo y presiona `Verificar codigo`.
+
+        ## Estado esperado de la UI antes de llamar
+        - `step = code`
+        - correo visible en modo readonly o bloqueado
+        - input `codigo` habilitado
+        - formulario final todavia deshabilitado
+
+        ## Headers a enviar
+        ```http
+        Content-Type: application/json
+        Accept: application/json
+        ```
+
+        ## Body exacto esperado
+        ```json
+        {
+          "correo": "usuario@correo.com",
+          "codigo": "123456"
+        }
+        ```
+
+        ## Que debe hacer el frontend si responde 200
+        - guardar `data.verificationToken`
+        - mover `step` a `signupForm`
+        - dejar `correo` en readonly
+        - habilitar:
+          - `usuario`
+          - `contrasena`
+          - `confirmarContrasena`
+          - `genero`
+          - `Crear cuenta`
+        - deshabilitar u ocultar el input `codigo`
+
+        ## Que debe hacer el frontend si falla
+        - `400 CODIGO_VERIFICACION_INVALIDO` con mensaje `incorrecto`: quedarse en la vista de codigo y permitir reintento
+        - `400 CODIGO_VERIFICACION_INVALIDO` con mensaje `ya no esta disponible`: pedir codigo nuevo
+        - `400 CODIGO_VERIFICACION_EXPIRADO`: pedir codigo nuevo
+        - `429 LIMITE_INTENTOS_VERIFICACION_ALCANZADO`: bloquear reintentos de ese codigo y pedir uno nuevo
+        - `400 VALIDACION_FALLIDA`: no avanzar
+      operationId: verifySignupCode
+      requestBody:
+        required: true
+        description: |
+          Body JSON para validar el codigo recibido por correo.
+
+          Campos obligatorios:
+          - `correo`
+          - `codigo`
+
+          Restricciones:
+          - `codigo` debe tener exactamente 6 digitos
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifySignupCodeRequest"
+            examples:
+              request:
+                value:
+                  correo: usuario@correo.com
+                  codigo: "123456"
+      responses:
+        "200":
+          description: Correo verificado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseVerifySignupCode"
+              examples:
+                success:
+                  value:
+                    success: true
+                    message: Correo verificado correctamente
+                    data:
+                      correo: usuario@correo.com
+                      verificationToken: jwt-temporal
+        "400":
+          description: Error de validacion o codigo no valido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                missingCode:
+                  value:
+                    success: false
+                    message: "codigo: El codigo es obligatorio"
+                    errorCode: VALIDACION_FALLIDA
+                invalidCodeFormat:
+                  value:
+                    success: false
+                    message: "codigo: El codigo debe tener exactamente 6 digitos"
+                    errorCode: VALIDACION_FALLIDA
+                wrongCode:
+                  value:
+                    success: false
+                    message: El codigo de verificacion es incorrecto.
+                    errorCode: CODIGO_VERIFICACION_INVALIDO
+                unavailableCode:
+                  value:
+                    success: false
+                    message: El codigo de verificacion es invalido o ya no esta disponible.
+                    errorCode: CODIGO_VERIFICACION_INVALIDO
+                expiredCode:
+                  value:
+                    success: false
+                    message: El codigo de verificacion expiro. Solicita uno nuevo.
+                    errorCode: CODIGO_VERIFICACION_EXPIRADO
+        "429":
+          description: Limite de intentos alcanzado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                attemptsLimit:
+                  value:
+                    success: false
+                    message: Se alcanzo el limite de intentos para este codigo. Solicita uno nuevo.
+                    errorCode: LIMITE_INTENTOS_VERIFICACION_ALCANZADO
+        "500":
+          description: Error interno no controlado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                internalError:
+                  value:
+                    success: false
+                    message: Error interno del servidor. Por favor intente de nuevo.
+                    errorCode: ERROR_INTERNO
+
+  /auth/signup:
+    post:
+      tags:
+        - Auth
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/AcceptJsonHeader"
+      summary: Crear usuario despues de verificar el correo
+      description: |
+        ## Cuando debe llamarse
+        Este endpoint se llama solo despues de:
+        1. solicitar codigo correctamente
+        2. verificar codigo correctamente
+        3. guardar `verificationToken`
+
+        ## Estado esperado de la UI antes de llamar
+        - `step = signupForm`
+        - correo en readonly
+        - `verificationToken` ya guardado en estado
+        - formulario final visible y habilitado
+
+        ## Headers a enviar
+        ```http
+        Content-Type: application/json
+        Accept: application/json
+        ```
+
+        ## Body exacto esperado
+        ```json
+        {
+          "usuario": "front_flow_user",
+          "correo": "usuario@correo.com",
+          "contrasena": "Password123",
+          "confirmarContrasena": "Password123",
+          "genero": 1,
+          "verificationToken": "jwt-temporal"
+        }
+        ```
+
+        ## Que debe hacer el frontend si responde 201
+        - mover `step` a `done`
+        - limpiar `verificationToken`
+        - mostrar mensaje de registro completado
+        - redirigir a login o continuar con flujo de autenticacion
+
+        ## Que debe hacer el frontend si falla
+        - `401 TOKEN_VERIFICACION_INVALIDO`: regresar a la vista de codigo
+        - `400 CORREO_NO_VERIFICADO`: regresar a la vista de codigo
+        - `400 CODIGO_VERIFICACION_EXPIRADO`: regresar a la vista de codigo
+        - `409 EMAIL_DUPLICADO`: sugerir login
+        - `404 GENERO_NO_ENCONTRADO`: mostrar error de catalogo, no reintentar automatico
+        - `404 ROL_CLIENTE_NO_CONFIGURADO`: mostrar error general y escalar al backend
+      operationId: signup
+      requestBody:
+        required: true
+        description: |
+          Body JSON para el alta final del usuario.
+
+          Campos obligatorios:
+          - `usuario`
+          - `correo`
+          - `contrasena`
+          - `confirmarContrasena`
+          - `genero`
+          - `verificationToken`
+
+          Restricciones:
+          - `usuario`: maximo 100 caracteres
+          - `contrasena`: minimo 8 caracteres
+          - `confirmarContrasena` debe coincidir con `contrasena`
+          - `verificationToken` debe venir del paso verify-code
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+            examples:
+              request:
+                value:
+                  usuario: front_flow_user
+                  correo: usuario@correo.com
+                  contrasena: Password123
+                  confirmarContrasena: Password123
+                  genero: 1
+                  verificationToken: jwt-temporal
+      responses:
+        "201":
+          description: Usuario registrado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseSignup"
+              examples:
+                success:
+                  value:
+                    success: true
+                    message: Usuario registrado exitosamente
+                    data:
+                      correo: usuario@correo.com
+                      usuario: front_flow_user
+                      rol: CLIENTE
+        "400":
+          description: Error de validacion o error de negocio de signup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                missingVerificationToken:
+                  value:
+                    success: false
+                    message: "verificationToken: El verificationToken es obligatorio"
+                    errorCode: VALIDACION_FALLIDA
+                passwordMismatch:
+                  value:
+                    success: false
+                    message: La contrasena y su confirmacion no coinciden
+                    errorCode: VALIDACION_FALLIDA
+                correoNoVerificado:
+                  value:
+                    success: false
+                    message: El correo aun no ha sido verificado para completar el registro.
+                    errorCode: CORREO_NO_VERIFICADO
+                verificationExpired:
+                  value:
+                    success: false
+                    message: La verificacion del correo expiro. Solicita un codigo nuevo.
+                    errorCode: CODIGO_VERIFICACION_EXPIRADO
+        "401":
+          description: verificationToken invalido o expirado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidVerificationToken:
+                  value:
+                    success: false
+                    message: El verificationToken es invalido o ya expiro. Verifica tu correo nuevamente.
+                    errorCode: TOKEN_VERIFICACION_INVALIDO
+        "404":
+          description: Catalogo requerido no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                generoNotFound:
+                  value:
+                    success: false
+                    message: El genero con id 999 no existe en la tabla CAT_GENERO
+                    errorCode: GENERO_NO_ENCONTRADO
+                defaultRoleNotConfigured:
+                  value:
+                    success: false
+                    message: El rol por defecto 'CLIENTE' no existe en la tabla ROLES. Es necesario cargar los catalogos base (INSERT en ROLES con nombre_perfil='CLIENTE') antes de realizar el primer signup.
+                    errorCode: ROL_CLIENTE_NO_CONFIGURADO
+        "409":
+          description: El correo ya existe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                duplicateEmail:
+                  value:
+                    success: false
+                    message: "El correo 'usuario@correo.com' ya esta registrado"
+                    errorCode: EMAIL_DUPLICADO
+        "500":
+          description: Error interno no controlado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                internalError:
+                  value:
+                    success: false
+                    message: Error interno del servidor. Por favor intente de nuevo.
+                    errorCode: ERROR_INTERNO
+
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/AcceptJsonHeader"
+      summary: Autenticar usuario existente
+      description: |
+        ## Cuando debe llamarse
+        Se usa para autenticar un usuario ya registrado.
+
+        ## Headers a enviar
+        ```http
+        Content-Type: application/json
+        Accept: application/json
+        ```
+
+        ## Body exacto esperado
+        ```json
+        {
+          "correo": "usuario@correo.com",
+          "contrasena": "Password123"
+        }
+        ```
+
+        ## Particularidad importante del contrato
+        - En exito este endpoint NO responde con `ApiResponse`
+        - En error SI responde con `ErrorResponse`
+
+        El frontend debe parsear ambos escenarios correctamente.
+
+        ## Comportamiento validado
+        - Intentos 1 a 4 con password incorrecta -> `401 CREDENCIALES_INVALIDAS`
+        - Intento 5 y posteriores -> `423 CUENTA_BLOQUEADA`
+
+        ## Que debe hacer el frontend si responde 200
+        - guardar `token`
+        - guardar `nombre`
+        - abrir sesion
+
+        ## Que debe hacer el frontend si falla
+        - `401 CREDENCIALES_INVALIDAS`: mostrar mensaje generico
+        - `423 CUENTA_BLOQUEADA`: bloquear reintento automatico y mostrar contacto a soporte
+      operationId: login
+      requestBody:
+        required: true
+        description: |
+          Body JSON para login.
+
+          Campos obligatorios:
+          - `correo`
+          - `contrasena`
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              request:
+                value:
+                  correo: usuario@correo.com
+                  contrasena: Password123
+      responses:
+        "200":
+          description: Autenticacion exitosa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginSuccessResponse"
+              examples:
+                success:
+                  value:
+                    success: true
+                    message: Autenticacion exitosa
+                    token: jwt-de-sesion
+                    nombre: front_flow_user
+        "400":
+          description: Error de validacion del request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidEmail:
+                  value:
+                    success: false
+                    message: "correo: El formato del correo no es valido"
+                    errorCode: VALIDACION_FALLIDA
+                missingPassword:
+                  value:
+                    success: false
+                    message: "contrasena: La contrasena es obligatoria"
+                    errorCode: VALIDACION_FALLIDA
+        "401":
+          description: Credenciales incorrectas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidCredentials:
+                  value:
+                    success: false
+                    message: Correo o contrasena incorrectos
+                    errorCode: CREDENCIALES_INVALIDAS
+        "423":
+          description: Cuenta bloqueada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                lockedAccount:
+                  value:
+                    success: false
+                    message: Tu cuenta ha sido bloqueada temporalmente por multiples intentos fallidos. Contacta a soporte para desbloquearla.
+                    errorCode: CUENTA_BLOQUEADA
+        "500":
+          description: Error interno no controlado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                internalError:
+                  value:
+                    success: false
+                    message: Error interno del servidor. Por favor intente de nuevo.
+                    errorCode: ERROR_INTERNO
+
+components:
+  parameters:
+    AcceptJsonHeader:
+      in: header
+      name: Accept
+      required: false
+      description: |
+        Header recomendado para frontend.
+
+        Valor esperado:
+        ```http
+        Accept: application/json
+        ```
+      schema:
+        type: string
+        example: application/json
+
+  schemas:
+    RequestSignupCodeRequest:
+      type: object
+      description: Request del paso 1 del signup.
+      required:
+        - correo
+      properties:
+        correo:
+          type: string
+          format: email
+          description: Correo a verificar antes del signup
+          example: usuario@correo.com
+
+    VerifySignupCodeRequest:
+      type: object
+      description: Request del paso 2 del signup.
+      required:
+        - correo
+        - codigo
+      properties:
+        correo:
+          type: string
+          format: email
+          example: usuario@correo.com
+        codigo:
+          type: string
+          pattern: '^\d{6}$'
+          description: Codigo OTP de 6 digitos
+          example: "123456"
+
+    SignupRequest:
+      type: object
+      description: Request del paso 3 del signup. Requiere verificationToken valido.
+      required:
+        - usuario
+        - correo
+        - contrasena
+        - confirmarContrasena
+        - genero
+        - verificationToken
+      properties:
+        usuario:
+          type: string
+          maxLength: 100
+          example: front_flow_user
+        correo:
+          type: string
+          format: email
+          example: usuario@correo.com
+        contrasena:
+          type: string
+          minLength: 8
+          example: Password123
+        confirmarContrasena:
+          type: string
+          example: Password123
+        genero:
+          type: integer
+          format: int64
+          example: 1
+        verificationToken:
+          type: string
+          description: Token temporal devuelto por verify-code
+          example: jwt-temporal
+
+    LoginRequest:
+      type: object
+      description: Request del login normal de usuario.
+      required:
+        - correo
+        - contrasena
+      properties:
+        correo:
+          type: string
+          format: email
+          example: usuario@correo.com
+        contrasena:
+          type: string
+          example: Password123
+
+    RequestSignupCodeData:
+      type: object
+      description: Payload exitoso de request-code.
+      required:
+        - correo
+        - fechaExpiracion
+      properties:
+        correo:
+          type: string
+          format: email
+          example: usuario@correo.com
+        fechaExpiracion:
+          type: string
+          format: date-time
+          example: "2026-03-24T13:07:44.105643"
+        codigoDebug:
+          type: string
+          nullable: true
+          description: Solo para debug local. No usar en produccion.
+          example: "714248"
+
+    VerifySignupCodeData:
+      type: object
+      description: Payload exitoso de verify-code.
+      required:
+        - correo
+        - verificationToken
+      properties:
+        correo:
+          type: string
+          format: email
+          example: usuario@correo.com
+        verificationToken:
+          type: string
+          description: Token temporal para permitir el signup final
+          example: jwt-temporal
+
+    SignupData:
+      type: object
+      description: Payload exitoso del alta final.
+      required:
+        - correo
+        - usuario
+        - rol
+      properties:
+        correo:
+          type: string
+          format: email
+          example: usuario@correo.com
+        usuario:
+          type: string
+          example: front_flow_user
+        rol:
+          type: string
+          example: CLIENTE
+
+    ApiResponseRequestSignupCode:
+      type: object
+      description: Envelope exitoso del paso request-code.
+      required:
+        - success
+        - message
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Codigo de verificacion generado
+        data:
+          $ref: "#/components/schemas/RequestSignupCodeData"
+
+    ApiResponseVerifySignupCode:
+      type: object
+      description: Envelope exitoso del paso verify-code.
+      required:
+        - success
+        - message
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Correo verificado correctamente
+        data:
+          $ref: "#/components/schemas/VerifySignupCodeData"
+
+    ApiResponseSignup:
+      type: object
+      description: Envelope exitoso del paso signup.
+      required:
+        - success
+        - message
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Usuario registrado exitosamente
+        data:
+          $ref: "#/components/schemas/SignupData"
+
+    LoginSuccessResponse:
+      type: object
+      description: Respuesta exitosa de login. Este endpoint no usa ApiResponse en exito.
+      required:
+        - success
+        - message
+        - token
+        - nombre
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Autenticacion exitosa
+        token:
+          type: string
+          description: JWT de sesion
+          example: jwt-de-sesion
+        nombre:
+          type: string
+          example: front_flow_user
+
+    ErrorResponse:
+      type: object
+      description: |
+        Formato general de error.
+
+        Recomendacion para frontend:
+        - usar `errorCode` para la logica
+        - usar `message` para texto visible
+      required:
+        - success
+        - message
+        - errorCode
+      properties:
+        success:
+          type: boolean
+          enum:
+            - false
+        message:
+          type: string
+          example: Error de negocio
+        errorCode:
+          type: string
+          enum:
+            - EMAIL_DUPLICADO
+            - CURP_DUPLICADO
+            - ROL_NO_ENCONTRADO
+            - ROL_CLIENTE_NO_CONFIGURADO
+            - GENERO_NO_ENCONTRADO
+            - ESTADO_NO_ENCONTRADO
+            - CODIGO_VERIFICACION_INVALIDO
+            - CODIGO_VERIFICACION_EXPIRADO
+            - CORREO_NO_VERIFICADO
+            - TOKEN_VERIFICACION_INVALIDO
+            - LIMITE_REENVIOS_ALCANZADO
+            - LIMITE_INTENTOS_VERIFICACION_ALCANZADO
+            - USUARIO_NO_ENCONTRADO
+            - CREDENCIALES_INVALIDAS
+            - CUENTA_BLOQUEADA
+            - TOKEN_EXPIRADO
+            - TOKEN_INVALIDO
+            - VALIDACION_FALLIDA
+            - RECURSO_NO_ENCONTRADO
+            - ERROR_INTERNO

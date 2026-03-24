@@ -31,6 +31,9 @@ public class JwtService {
     @Value("${jwt.expiration:${bancup.jwt.expiration-ms:86400000}}")
     private long expirationMs;
 
+    @Value("${bancup.signup.verification-token-expiration-ms:900000}")
+    private long signupVerificationExpirationMs;
+
     /**
      * Genera un JWT firmado con HS256.
      *
@@ -47,6 +50,17 @@ public class JwtService {
                 .claim("role", role)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
+                .signWith(getSigningKey())
+                .compact();
+    }
+
+    public String generateSignupVerificationToken(String email) {
+        return Jwts.builder()
+                .subject(email)
+                .claim("email", email)
+                .claim("purpose", "SIGNUP_VERIFICATION")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + signupVerificationExpirationMs))
                 .signWith(getSigningKey())
                 .compact();
     }
@@ -80,6 +94,20 @@ public class JwtService {
 
     public String extractRole(String token) {
         return extractAllClaims(token).get("role", String.class);
+    }
+
+    public boolean validateSignupVerificationToken(String token, String expectedEmail) {
+        try {
+            Claims claims = extractAllClaims(token);
+            String purpose = claims.get("purpose", String.class);
+            String email = claims.get("email", String.class);
+            return "SIGNUP_VERIFICATION".equals(purpose)
+                    && email != null
+                    && email.equalsIgnoreCase(expectedEmail);
+        } catch (JwtException | IllegalArgumentException e) {
+            log.warn("Token de verificacion invalido o expirado: {}", e.getMessage());
+            return false;
+        }
     }
 
     private Claims extractAllClaims(String token) {

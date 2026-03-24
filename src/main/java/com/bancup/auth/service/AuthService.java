@@ -1,9 +1,13 @@
 package com.bancup.auth.service;
 
 import com.bancup.auth.dto.request.LoginRequest;
+import com.bancup.auth.dto.request.RequestSignupCodeRequest;
 import com.bancup.auth.dto.request.SignupRequest;
+import com.bancup.auth.dto.request.VerifySignupCodeRequest;
 import com.bancup.auth.dto.response.LoginResponse;
+import com.bancup.auth.dto.response.RequestSignupCodeResponse;
 import com.bancup.auth.dto.response.SignupResponse;
+import com.bancup.auth.dto.response.VerifySignupCodeResponse;
 
 /**
  * Contrato del servicio de autenticacion Bancup.
@@ -12,6 +16,10 @@ import com.bancup.auth.dto.response.SignupResponse;
  * Fase 2: login con JWT.
  */
 public interface AuthService {
+
+    RequestSignupCodeResponse requestSignupCode(RequestSignupCodeRequest request, String ipOrigen);
+
+    VerifySignupCodeResponse verifySignupCode(VerifySignupCodeRequest request, String ipOrigen);
 
     /**
      * Registra un nuevo usuario en el sistema.
