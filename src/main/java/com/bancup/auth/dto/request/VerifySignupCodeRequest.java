@@ -15,4 +15,12 @@ public class VerifySignupCodeRequest {
     @NotBlank(message = "El codigo es obligatorio")
     @Pattern(regexp = "\\d{6}", message = "El codigo debe tener exactamente 6 digitos")
     private String codigo;
+
+    public void setCorreo(String correo) {
+        this.correo = correo != null ? correo.trim() : null;
+    }
+
+    public void setCodigo(String codigo) {
+        this.codigo = codigo != null ? codigo.trim() : null;
+    }
 }

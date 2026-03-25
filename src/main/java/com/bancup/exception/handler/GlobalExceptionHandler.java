@@ -123,6 +123,7 @@ public class GlobalExceptionHandler {
         HttpStatus status = switch (ex.getErrorCode()) {
             case TOKEN_VERIFICACION_INVALIDO -> HttpStatus.UNAUTHORIZED;
             case LIMITE_REENVIOS_ALCANZADO, LIMITE_INTENTOS_VERIFICACION_ALCANZADO -> HttpStatus.TOO_MANY_REQUESTS;
+            case ENVIO_CORREO_FALLIDO -> HttpStatus.INTERNAL_SERVER_ERROR;
             default -> HttpStatus.BAD_REQUEST;
         };
 

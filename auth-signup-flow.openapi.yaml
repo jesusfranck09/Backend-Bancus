@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Bancup Auth Signup Flow
-  version: "2026-03-24"
+  version: "2026-03-25"
   description: |
     Especificacion OpenAPI y guia operativa del flujo actual de autenticacion para frontend.
 
@@ -81,13 +81,21 @@ info:
     El frontend debe contemplar esa diferencia.
 
     ## Nota sobre envio de correo
-    Actualmente el backend no envia correo real por SMTP.
-    En ambiente local de debug, `request-code` puede devolver `data.codigoDebug`.
-    El frontend no debe depender de ese campo fuera de pruebas locales.
+    El backend soporta dos modos de entrega del codigo:
+    - logging de backend si `BANCUP_MAIL_ENABLED=false` o no esta configurado
+    - envio real por SMTP si `BANCUP_MAIL_ENABLED=true` y existen variables `MAIL_*`
+
+    Adicionalmente, `request-code` puede devolver `data.codigo` y `data.codigoDebug`
+    si `BANCUP_VERIFICATION_RETURN_CODE_IN_RESPONSE=true`.
+
+    En el backend actual, si esos dos campos vienen en la respuesta, ambos contienen el mismo valor.
+    El frontend no debe depender de esos campos fuera de pruebas o integracion controlada.
 
 servers:
+  - url: http://BackendBancup-env.eba-rmigtkqq.us-east-1.elasticbeanstalk.com
+    description: Backend desplegado en AWS Elastic Beanstalk
   - url: http://localhost:8081
-    description: Backend local
+    description: Backend local de desarrollo
 
 tags:
   - name: Auth
@@ -131,6 +139,10 @@ paths:
           "correo": "usuario@correo.com"
         }
         ```
+
+        ## Nota de entrega del codigo
+        - si `BANCUP_MAIL_ENABLED=true`, el backend intenta enviar el codigo al correo capturado
+        - si `BANCUP_VERIFICATION_RETURN_CODE_IN_RESPONSE=true`, la respuesta tambien puede incluir `data.codigo` y `data.codigoDebug`
 
         ## Que debe hacer el frontend si responde 200
         - mover `step` a `code`
@@ -187,6 +199,7 @@ paths:
                     data:
                       correo: usuario@correo.com
                       fechaExpiracion: "2026-03-24T13:07:44.105643"
+                      codigo: "714248"
                       codigoDebug: "714248"
         "400":
           description: Error de validacion del request
@@ -235,12 +248,17 @@ paths:
                     message: Se alcanzo el limite de reenvios para este correo. Espera a que expire el codigo actual o intenta mas tarde.
                     errorCode: LIMITE_REENVIOS_ALCANZADO
         "500":
-          description: Error interno no controlado
+          description: Error interno o fallo al enviar el correo
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
               examples:
+                mailDeliveryError:
+                  value:
+                    success: false
+                    message: No fue posible enviar el correo de verificacion. Intenta nuevamente.
+                    errorCode: ENVIO_CORREO_FALLIDO
                 internalError:
                   value:
                     success: false
@@ -813,10 +831,15 @@ components:
           type: string
           format: date-time
           example: "2026-03-24T13:07:44.105643"
+        codigo:
+          type: string
+          nullable: true
+          description: Solo si `BANCUP_VERIFICATION_RETURN_CODE_IN_RESPONSE=true`. Se usa para pruebas o integracion temporal.
+          example: "714248"
         codigoDebug:
           type: string
           nullable: true
-          description: Solo para debug local. No usar en produccion.
+          description: Alias legado de debug. Si viene presente, actualmente contiene el mismo valor que `codigo`.
           example: "714248"
 
     VerifySignupCodeData:

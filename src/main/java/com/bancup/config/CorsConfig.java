@@ -19,7 +19,10 @@ public class CorsConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of(
                 "http://localhost:*",
-                "http://127.0.0.1:*"
+                "http://127.0.0.1:*",
+                "https://bancus-dev.di0cd8gp9bhtr.amplifyapp.com",
+                "https://bancus-prod.di0cd8gp9bhtr.amplifyapp.com",
+                "https://bancus-integration.di0cd8gp9bhtr.amplifyapp.com"
         ));
         configuration.setAllowedMethods(List.of("*"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));

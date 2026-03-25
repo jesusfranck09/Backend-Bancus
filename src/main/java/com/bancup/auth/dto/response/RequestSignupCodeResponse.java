@@ -13,5 +13,6 @@ public class RequestSignupCodeResponse {
 
     private String correo;
     private LocalDateTime fechaExpiracion;
+    private String codigo;
     private String codigoDebug;
 }

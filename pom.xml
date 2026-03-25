@@ -49,6 +49,12 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- SMTP / Mail -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- Oracle JDBC Driver (ojdbc11: Java 11+/21 + Oracle 19c) -->
         <dependency>
             <groupId>com.oracle.database.jdbc</groupId>

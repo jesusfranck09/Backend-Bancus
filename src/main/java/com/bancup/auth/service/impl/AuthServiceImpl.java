@@ -27,6 +27,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -64,8 +65,11 @@ public class AuthServiceImpl implements AuthService {
     @Value("${bancup.verification.max-resends:3}")
     private int maxVerificationResends;
 
-    @Value("${bancup.verification.debug-return-code:false}")
-    private boolean debugReturnCode;
+    @Value("${bancup.verification.return-code-in-response:${bancup.verification.debug-return-code:false}}")
+    private boolean returnCodeInResponse;
+
+    @Value("${bancup.signup.verification-token-expiration-ms:900000}")
+    private long signupVerificationExpirationMs;
 
     @Override
     @Transactional
@@ -118,7 +122,8 @@ public class AuthServiceImpl implements AuthService {
         return RequestSignupCodeResponse.builder()
                 .correo(emailNormalizado)
                 .fechaExpiracion(fechaExpiracion)
-                .codigoDebug(debugReturnCode ? codigoPlano : null)
+                .codigo(returnCodeInResponse ? codigoPlano : null)
+                .codigoDebug(returnCodeInResponse ? codigoPlano : null)
                 .build();
     }
 
@@ -190,6 +195,9 @@ public class AuthServiceImpl implements AuthService {
         if (codigo.getEstatus() == EstatusCodigoVerificacion.PENDIENTE) {
             codigo.setEstatus(EstatusCodigoVerificacion.VERIFICADO);
             codigo.setFechaVerificado(ahora);
+            // Una vez validado el codigo, la ventana para completar signup queda
+            // alineada con la vigencia del verificationToken temporal.
+            codigo.setFechaExpiracion(ahora.plus(Duration.ofMillis(signupVerificationExpirationMs)));
             codigo.setIpOrigen(ipOrigen);
             codigo.setFechaModifica(ahora);
             codigo.setUsuarioModifica(USUARIO_SISTEMA);
